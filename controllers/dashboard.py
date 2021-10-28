@@ -312,6 +312,7 @@ def index():
     return dict(
         assignments=assignments,
         course=course,
+        is_instructor=True,
         questions=questions,
         sections=sections,
         chapters=chapters,
@@ -451,11 +452,13 @@ def grades():
     # recalculate total points for each assignment in case the stored
     # total is out of sync.
     duedates = []
+    totalpoints = []
     for assign in assignments:
         assign.points = update_total_points(assign.id)
         duedates.append(date2String(assign.duedate))
+        totalpoints.append(assign.points)
 
-    students = db(
+    allstudents = db(
         (db.user_courses.course_id == auth.user.course_id)
         & (db.auth_user.id == db.user_courses.user_id)
     ).select(
@@ -474,7 +477,12 @@ def grades():
         where points is not null and assignments.course = %s and auth_user.id in
             (select user_id from user_courses where course_id = %s)
             order by last_name, first_name, assignments.duedate, assignments.id;"""
-    rows = db.executesql(query, [course["id"], course["id"]])
+    trows = db.executesql(query, [course["id"], course["id"]])
+    rows = []
+    for row in trows:
+        # remove instructor rows from trows
+        if not verifyInstructorStatus(auth.user.course_id, row[3]):
+            rows.append(row)
 
     studentinfo = {}
     practice_setting = (
@@ -482,7 +490,12 @@ def grades():
     )
     practice_average = 0
     total_possible_points = 0
-    for s in students:
+    students = []
+    for s in allstudents:
+        if verifyInstructorStatus(auth.user.course_id, s.id):
+            # filter out instructors from the gradebook
+            continue
+        students.append(s)
         if practice_setting:
             if practice_setting.spacing == 1:
                 practice_completion_count = db(
@@ -574,6 +587,7 @@ def grades():
         averagerow=averagerow,
         practice_average=practice_average,
         duedates=duedates,
+        totalpoints=totalpoints,
     )
 
 
@@ -687,7 +701,7 @@ def exercisemetrics():
     prob_id = request.vars["id"]
     answers = []
     attempt_histogram = []
-    logger.debug(problem_metrics.problems)
+    logger.debug(f"PROBLEMS for problem metrics {problem_metrics.problems}")
     try:
         problem_metric = problem_metrics.problems[prob_id]
     except KeyError:
@@ -1010,7 +1024,21 @@ select name, question_type, min(useinfo.timestamp) as first, max(useinfo.timesta
                     row["correct"] = "No"
             else:
                 row["correct"] = "NA"
-
+        elif row["question_type"] in ["khanex", "quizly"]:
+            kqres = (
+                db(
+                    (db.useinfo.sid == request.vars.sid)
+                    & (db.useinfo.div_id == row["name"])
+                    & (db.useinfo.course_id == thecourse.course_name)
+                    & (db.useinfo.act.like("%correct"))
+                )
+                .select()
+                .first()
+            )
+            if kqres:
+                row["correct"] = "Yes"
+            else:
+                row["correct"] = "No"
         else:
             row["correct"] = "NA"
 
