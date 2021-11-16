@@ -142,7 +142,7 @@ CodeChat_lexer_for_glob = {
     # The Dockerfile has ``#`` as comments. So does Perl...
     "Dockerfile": "Perl",
     "*.conf": "Perl",
-    "runestone": "Perl",
+    "runestone.template": "Perl",
     # Docker's env files are INI formatted.
     ".env*": "INI",
 }
@@ -210,6 +210,7 @@ exclude_patterns = [
     "jobeinabox/include",
     # Ignore the Sphinx build directory output.
     "_build",
+    "tests/test_course_1/build",
     # **CodeChat notes:**
     #
     # The ``CodeToRestSphinx`` extension creates a file named

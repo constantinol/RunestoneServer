@@ -13,6 +13,7 @@
 # ----------------
 from pathlib import Path
 import sys
+import subprocess
 from typing import Optional
 
 # Third-party
@@ -27,8 +28,13 @@ from ci_utils import chdir, env, xqt
 # Globals
 # =======
 # The name of the container running the Runestone servers.
-RUNESTONE_CONTAINER_NAME = "runestone_runestone_1"
-
+res = subprocess.run(
+    'docker ps --filter "ancestor=runestone/server"  --format "{{.Names}}"',
+    shell=True,
+    capture_output=True,
+    text=True,
+)
+RUNESTONE_CONTAINER_NAME = res.stdout.strip()
 
 # Subcommands for the CLI
 # ========================
@@ -48,6 +54,10 @@ def bookserver(dev: bool) -> None:
     run_bookserver(dev)
 
 
+# .. _run_bookserver:
+#
+# run_bookserver
+# --------------
 # Since click changes the way argument passing works, have a non-click version that's easily callable from Python code.
 def run_bookserver(dev: bool) -> None:
     ensure_in_docker()
@@ -60,6 +70,7 @@ def run_bookserver(dev: bool) -> None:
         run_bookserver_venv + "--root /ns "
         "--error_path /tmp "
         "--gconfig /etc/gunicorn/gunicorn.conf.py "
+        # This must match with the `gunicorn socket <gunicorn socket>`.
         "--bind unix:/run/gunicorn.sock " + ("--reload " if dev else "") + "&",
         **run_bookserver_kwargs,
     )
@@ -90,6 +101,9 @@ def shell() -> None:
     """
     if in_docker():
         print("Already in Docker. Doing nothing.")
+        return
+    if RUNESTONE_CONTAINER_NAME == "":
+        click.echo("Error - Unable to find Runestone Server Container")
         return
     xqt(f"docker exec -it {RUNESTONE_CONTAINER_NAME} bash")
 
@@ -135,6 +149,10 @@ def in_docker() -> bool:
 def ensure_in_docker() -> None:
     if in_docker():
         return
+    if RUNESTONE_CONTAINER_NAME == "":
+        click.echo("Error - Unable to find Runestone Server Container")
+        sys.exit(1)
+
     # Some subtleties:
     #
     # #.    Single-quote each argument before passing it.
